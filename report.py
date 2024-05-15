@@ -16,7 +16,7 @@ class TestConfig:
         self.model_path = ''
         self.epoch_number = []
         self.batches_in_epoch = []
-        self.frozen_ops_idx = []
+        self.trainable_ops_idx = []
         self.optimizer = '1'
         self.gen_train_data_method = None
 
@@ -28,7 +28,7 @@ mobilenetv2.epoch_number = [1, 5, 10]
 mobilenetv2.batches_in_epoch = [10, 30, 50]
 # mobilenetv2.epoch_number = [1, 2]
 # mobilenetv2.batches_in_epoch = [10, 30]
-mobilenetv2.frozen_ops_idx = ['', '0-68', '0-63', '0-30', '0-10']
+mobilenetv2.trainable_ops_idx = ['', '69', '64-69', '31-69', '11-69']
 mobilenetv2.optimizer = '1'
 from training_data.mobilenet_data.gen_mobilenet_train_data import generate_train_data as mobilenet_gen
 mobilenetv2.gen_train_data_method = mobilenet_gen
@@ -41,7 +41,7 @@ conv_mnist.epoch_number = [10, 20, 30]
 conv_mnist.batches_in_epoch = [100, 200, 300]
 # conv_mnist.epoch_number = [5, 10]
 # conv_mnist.batches_in_epoch = [20, 30]
-conv_mnist.frozen_ops_idx = ['', '0-6', '0-5', '0-1']
+conv_mnist.trainable_ops_idx = ['', '6', '5,6', '2-6']
 conv_mnist.optimizer = '2'
 from training_data.mnist_data.gen_mnist_train_data import generate_train_data as mnist_gen
 conv_mnist.gen_train_data_method = mnist_gen
@@ -64,18 +64,18 @@ def extract_train_result(train_result):
             
     return result
 
-def check_if_frozen_weights_not_changed(frozen_ops_idx, changed_weights_idx):
+def check_if_trainable_weights_changed(trainable_ops_idx, changed_weights_idx):
     if len(changed_weights_idx) > 0:
-        expected_not_changed_idx = []
-        for idx_str in frozen_ops_idx.split(','):
+        expected_changed_idx = []
+        for idx_str in trainable_ops_idx.split(','):
             if '-' in idx_str:
                 start, end = idx_str.split('-')
-                expected_not_changed_idx += list(range(int(start), int(end)+1))
+                expected_changed_idx += list(range(int(start), int(end)+1))
             else:
-                expected_not_changed_idx.append(int(idx_str))
-        for idx in expected_not_changed_idx:
+                expected_changed_idx.append(int(idx_str))
+        for idx in expected_changed_idx:
             if idx in changed_weights_idx:
-                if changed_weights_idx[idx]: # a frozen weight was changed
+                if not changed_weights_idx[idx]: # trainable weight not changed
                     return False
     return True
 
@@ -85,28 +85,28 @@ def run_command(command):
     end_time = time.time()
     return result.stdout, end_time - start_time
 
-report = '| test model | number of epochs | batches in epoch | frozen nodes idx | result of weights comparison | Accuracy/Time |\n'
-report += '| ---------- | ---------------- | ---------------- | ---------------- | ---------------------------- | ------------- |\n'
+report = '| test model | number of epochs | batches in epoch | trainable nodes idx | result of weights comparison | Accuracy/Time |\n'
+report += '| ---------- | ---------------- | ---------------- | ------------------- | ---------------------------- | ------------- |\n'
 for test_config in test_configs:
     for epoch_number in test_config.epoch_number:
         for batches_in_epoch in test_config.batches_in_epoch:
             in_data_path, out_data_path = test_config.gen_train_data_method(batches_in_epoch)
-            for frozen_ops_idx in test_config.frozen_ops_idx:
-                frozen_ops_idx_provided = len(frozen_ops_idx) > 0
+            for trainable_ops_idx in test_config.trainable_ops_idx:
+                trainable_ops_idx_provided = len(trainable_ops_idx) > 0
                 train_command = f"{onert_train_path} {test_config.model_path} --epoch {epoch_number} {onert_defalt_args} --load_expected:raw {out_data_path} --load_input:raw {in_data_path} --optimizer {test_config.optimizer}"
-                if frozen_ops_idx_provided:
-                    train_command += f' --frozen_ops_idx {frozen_ops_idx}'
+                if trainable_ops_idx_provided:
+                    train_command += f' --trainable_ops_idx {trainable_ops_idx}'
                     train_command += f' --export_path {export_model_path}'
                     shutil.copyfile(test_config.model_path, export_model_path)
                 train_cmd_res,_ = run_command(train_command)
                 comparision_result = 'NA'
-                if frozen_ops_idx_provided:
+                if trainable_ops_idx_provided:
                     compare_command = f'{comparator_path} {test_config.model_path} {export_model_path}'
                     compare_res_str,_ = run_command(compare_command)
                     os.remove(export_model_path)
                     changed_weights_idx = find_changed_weights(compare_res_str)
-                    comparision_result = 'PASS' if check_if_frozen_weights_not_changed(frozen_ops_idx, changed_weights_idx) else 'FAIL'
-                result = f'| {test_config.model_file} | {epoch_number} | {batches_in_epoch} | {frozen_ops_idx} | {comparision_result} | {extract_train_result(train_cmd_res)} |'
+                    comparision_result = 'PASS' if check_if_trainable_weights_changed(trainable_ops_idx, changed_weights_idx) else 'FAIL'
+                result = f'| {test_config.model_file} | {epoch_number} | {batches_in_epoch} | {trainable_ops_idx} | {comparision_result} | {extract_train_result(train_cmd_res)} |'
                 report += result + '\n'
 
 with open("report.md", "w") as report_file:
