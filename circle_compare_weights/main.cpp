@@ -105,6 +105,7 @@ std::vector<Tensor> extract_weights(std::string path) {
       throw std::runtime_error("many subgraphs not supported");
   const auto subg = subgs->Get(0);
   for(uint32_t i=0;i<subg->operators()->size();++i) {
+    std::cout << "size: " << subg->operators()->size() << "\n";
     const auto op = subg->operators()->Get(i);
     for(uint32_t j=0;j<op->inputs()->size();++j) {
       auto idx = op->inputs()->Get(j);
@@ -112,13 +113,14 @@ std::vector<Tensor> extract_weights(std::string path) {
         continue;
       }
       auto buf_idx = subg->tensors()->Get(idx)->buffer();
+      auto tensor_name = subg->tensors()->Get(buf_idx)->name()->c_str();
+      tensors.push_back(Tensor{tensor_name, {}, i});
+
       const ::circle::Buffer *buffer = (*model->buffers())[buf_idx];
       const flatbuffers::Vector<uint8_t> *tensor_array = buffer->data();
       if (!tensor_array) {
           continue;
       }
-      auto tensor_name = subg->tensors()->Get(buf_idx)->name()->c_str();
-      tensors.push_back(Tensor{tensor_name, {}, i});
       const auto float_array = reinterpret_cast<const float*>(tensor_array->data());
       const auto float_array_size = tensor_array->size()/sizeof(float);
       for(uint32_t k=0;k<float_array_size;k++) {

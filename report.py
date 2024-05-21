@@ -48,12 +48,15 @@ conv_mnist.gen_train_data_method = mnist_gen
 test_configs.append(conv_mnist)
 
 def find_changed_weights(compare_res_str):
-    result = {}
+    op_number = int(compare_res_str.split('\n')[0].split()[-1])
+    result = dict((idx, False) for idx in range(op_number))
     for line in compare_res_str.split('\n'):
+        if 'size:' in line:
+            continue
         if line:
             idx = int(line.split()[0])
-            changed = line.split()[-1] == 'changed'
-            result[idx] = changed
+            if line.split()[-1] == 'changed':
+                result[idx] = True
     return result
 
 def extract_train_result(train_result):
@@ -95,6 +98,7 @@ for test_config in test_configs:
             for trainable_ops_idx in test_config.trainable_ops_idx:
                 trainable_ops_idx_provided = len(trainable_ops_idx) > 0
                 train_command = f"{onert_train_path} {test_config.model_path} --epoch {epoch_number} {onert_defalt_args} --load_expected:raw {out_data_path} --load_input:raw {in_data_path} --optimizer {test_config.optimizer}"
+                print(train_command)
                 if trainable_ops_idx_provided:
                     train_command += f' --trainable_ops_idx {trainable_ops_idx}'
                     train_command += f' --export_path {export_model_path}'
