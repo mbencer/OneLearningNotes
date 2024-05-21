@@ -28,7 +28,7 @@ mobilenetv2.epoch_number = [1, 5, 10]
 mobilenetv2.batches_in_epoch = [10, 30, 50]
 # mobilenetv2.epoch_number = [1, 2]
 # mobilenetv2.batches_in_epoch = [10, 30]
-mobilenetv2.trainable_ops_idx = ['', '69', '64-69', '31-69', '11-69']
+mobilenetv2.trainable_ops_idx = ['', '69', '64-69', '31-69', '11-69', '0-69']
 mobilenetv2.optimizer = '1'
 from training_data.mobilenet_data.gen_mobilenet_train_data import generate_train_data as mobilenet_gen
 mobilenetv2.gen_train_data_method = mobilenet_gen
@@ -41,7 +41,7 @@ conv_mnist.epoch_number = [10, 20, 30]
 conv_mnist.batches_in_epoch = [100, 200, 300]
 # conv_mnist.epoch_number = [5, 10]
 # conv_mnist.batches_in_epoch = [20, 30]
-conv_mnist.trainable_ops_idx = ['', '6', '5,6', '2-6']
+conv_mnist.trainable_ops_idx = ['', '6', '5,6', '2-6', '0-6']
 conv_mnist.optimizer = '2'
 from training_data.mnist_data.gen_mnist_train_data import generate_train_data as mnist_gen
 conv_mnist.gen_train_data_method = mnist_gen
@@ -64,18 +64,19 @@ def extract_train_result(train_result):
             
     return result
 
-def check_if_trainable_weights_changed(trainable_ops_idx, changed_weights_idx):
+def check_if_frozen_weights_not_changed(trainable_ops_idx, changed_weights_idx):
     if len(changed_weights_idx) > 0:
-        expected_changed_idx = []
+        expected_not_changed_idx = list(range(0, next(reversed(changed_weights_idx.keys()))+1))
         for idx_str in trainable_ops_idx.split(','):
             if '-' in idx_str:
                 start, end = idx_str.split('-')
-                expected_changed_idx += list(range(int(start), int(end)+1))
+                for r_idx in range(int(start), int(end)+1):
+                    expected_not_changed_idx.remove(r_idx)
             else:
-                expected_changed_idx.append(int(idx_str))
-        for idx in expected_changed_idx:
+                expected_not_changed_idx.remove(int(idx_str))
+        for idx in expected_not_changed_idx:
             if idx in changed_weights_idx:
-                if not changed_weights_idx[idx]: # trainable weight not changed
+                if changed_weights_idx[idx]:
                     return False
     return True
 
@@ -105,7 +106,7 @@ for test_config in test_configs:
                     compare_res_str,_ = run_command(compare_command)
                     os.remove(export_model_path)
                     changed_weights_idx = find_changed_weights(compare_res_str)
-                    comparision_result = 'PASS' if check_if_trainable_weights_changed(trainable_ops_idx, changed_weights_idx) else 'FAIL'
+                    comparision_result = 'PASS' if check_if_frozen_weights_not_changed(trainable_ops_idx, changed_weights_idx) else 'FAIL'
                 result = f'| {test_config.model_file} | {epoch_number} | {batches_in_epoch} | {trainable_ops_idx} | {comparision_result} | {extract_train_result(train_cmd_res)} |'
                 report += result + '\n'
 
